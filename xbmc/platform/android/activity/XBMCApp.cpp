@@ -1332,7 +1332,6 @@ void CXBMCApp::onReceive(CJNIIntent intent)
   }
   else if (action == CJNIAudioManager::ACTION_HDMI_AUDIO_PLUG)
   {
-    m_supportsHdmiAudioPlug = true;
     const bool hdmiPlugged = (intent.getIntExtra(CJNIAudioManager::EXTRA_AUDIO_PLUG_STATE, 0) != 0);
     android_printf("-- HDMI is plugged in: %s", hdmiPlugged ? "yes" : "no");
     if (g_application.IsInitialized())
@@ -1361,7 +1360,7 @@ void CXBMCApp::onReceive(CJNIIntent intent)
     // screen but it is actually sent in response to changes in the overall interactive state of
     // the device.
     CLog::Log(LOGINFO, "Got device wakeup intent");
-    if (m_supportsHdmiAudioPlug)
+    if (m_hdmiSource)
       // wake-up sequence continues in ACTION_HDMI_AUDIO_PLUG intent
       m_wakeUp = true;
     else
