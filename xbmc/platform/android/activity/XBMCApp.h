@@ -256,7 +256,6 @@ private:
   bool m_headsetPlugged{false};
   bool m_hdmiSource{false};
   bool m_wakeUp{false};
-  bool m_aeReset{false};
   IInputDeviceCallbacks* m_inputDeviceCallbacks{nullptr};
   IInputDeviceEventHandler* m_inputDeviceEventHandler{nullptr};
   bool m_hasReqVisible{false};
@@ -278,9 +277,6 @@ private:
 
   bool XBMC_DestroyDisplay();
   bool XBMC_SetupDisplay();
-
-  void OnSleep();
-  void OnWakeup();
 
   uint32_t m_playback_state{0};
   int64_t m_frameTimeNanos{0};

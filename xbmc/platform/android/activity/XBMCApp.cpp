@@ -1334,21 +1334,16 @@ void CXBMCApp::onReceive(CJNIIntent intent)
   {
     const bool hdmiPlugged = (intent.getIntExtra(CJNIAudioManager::EXTRA_AUDIO_PLUG_STATE, 0) != 0);
     android_printf("-- HDMI is plugged in: %s", hdmiPlugged ? "yes" : "no");
-    if (g_application.IsInitialized())
+    if (m_hdmiSource && g_application.IsInitialized())
     {
       CWinSystemBase* winSystem = CServiceBroker::GetWinSystem();
       if (winSystem && dynamic_cast<CWinSystemAndroid*>(winSystem))
         dynamic_cast<CWinSystemAndroid*>(winSystem)->SetHdmiState(hdmiPlugged);
     }
-    if (hdmiPlugged && m_aeReset)
+    if (hdmiPlugged && m_wakeUp)
     {
       android_printf("CXBMCApp::onReceive: Reset audio engine");
       CServiceBroker::GetActiveAE()->DeviceChange();
-      m_aeReset = false;
-    }
-    if (hdmiPlugged && m_wakeUp)
-    {
-      OnWakeup();
       m_wakeUp = false;
     }
   }
@@ -1359,12 +1354,21 @@ void CXBMCApp::onReceive(CJNIIntent intent)
     // For historical reasons, the name of this broadcast action refers to the power state of the
     // screen but it is actually sent in response to changes in the overall interactive state of
     // the device.
-    CLog::Log(LOGINFO, "Got device wakeup intent");
-    if (m_hdmiSource)
-      // wake-up sequence continues in ACTION_HDMI_AUDIO_PLUG intent
-      m_wakeUp = true;
-    else
-      OnWakeup();
+    IPowerSyscall* syscall = CServiceBroker::GetPowerManager().GetPowerSyscall();
+    if (syscall)
+    {
+      CLog::Log(LOGINFO, "Got device wakeup intent");
+      static_cast<CAndroidPowerSyscall*>(syscall)->SetResumed();
+    }
+
+    if (HasFocus())
+    {
+      auto& components = CServiceBroker::GetAppComponents();
+      const auto appPower = components.GetComponent<CApplicationPowerHandling>();
+      appPower->WakeUpScreenSaverAndDPMS();
+    }
+
+    m_wakeUp = true;
   }
   else if (action == CJNIIntent::ACTION_SCREEN_OFF)
   {
@@ -1373,8 +1377,12 @@ void CXBMCApp::onReceive(CJNIIntent intent)
     // For historical reasons, the name of this broadcast action refers to the power state of the
     // screen but it is actually sent in response to changes in the overall interactive state of
     // the device.
-    CLog::Log(LOGINFO, "Got device sleep intent");
-    OnSleep();
+    IPowerSyscall* syscall = CServiceBroker::GetPowerManager().GetPowerSyscall();
+    if (syscall)
+    {
+      CLog::Log(LOGINFO, "Got device sleep intent");
+      static_cast<CAndroidPowerSyscall*>(syscall)->SetSuspended();
+    }
   }
   else if (action == CJNIIntent::ACTION_MEDIA_BUTTON)
   {
@@ -1409,29 +1417,6 @@ void CXBMCApp::onReceive(CJNIIntent intent)
       CAndroidKey::XBMC_Key(keycode, XBMCK_MEDIA_REWIND, 0, 0, up);
     else if (keycode == CJNIKeyEvent::KEYCODE_MEDIA_STOP)
       CAndroidKey::XBMC_Key(keycode, XBMCK_MEDIA_STOP, 0, 0, up);
-  }
-}
-
-void CXBMCApp::OnSleep()
-{
-  CLog::Log(LOGINFO, "CXBMCApp::OnSleep");
-  IPowerSyscall* syscall = CServiceBroker::GetPowerManager().GetPowerSyscall();
-  if (syscall)
-    static_cast<CAndroidPowerSyscall*>(syscall)->SetSuspended();
-}
-
-void CXBMCApp::OnWakeup()
-{
-  CLog::Log(LOGINFO, "CXBMCApp::OnWakeup");
-  IPowerSyscall* syscall = CServiceBroker::GetPowerManager().GetPowerSyscall();
-  if (syscall)
-    static_cast<CAndroidPowerSyscall*>(syscall)->SetResumed();
-
-  if (HasFocus())
-  {
-    auto& components = CServiceBroker::GetAppComponents();
-    const auto appPower = components.GetComponent<CApplicationPowerHandling>();
-    appPower->WakeUpScreenSaverAndDPMS();
   }
 }
 
@@ -1761,7 +1746,7 @@ void CXBMCApp::onDisplayChanged(int displayId)
 
   if (!g_application.IsInitialized())
     // Display mode has beed changed during app startup; we want to reset audio engine on next ACTION_HDMI_AUDIO_PLUG event
-    m_aeReset = true;
+    m_wakeUp = true;
 
   // Update display modes
   CWinSystemAndroid* winSystemAndroid = dynamic_cast<CWinSystemAndroid*>(CServiceBroker::GetWinSystem());
